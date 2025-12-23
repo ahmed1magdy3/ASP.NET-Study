@@ -9,13 +9,9 @@ Question 01 :
 */
 select u.DisplayName, pt.Type
 from Users u
-join Posts p on p.OwnerUserId = u.Id
-join PostTypes pt on pt.Id = p.PostTypeId
+cross join PostTypes pt
 ;
-select *
-from users;
-select *
-from PostTypes;
+
 /*
 Question 02 : 
 	●  Write a query to retrieve all posts along with their owner's  
