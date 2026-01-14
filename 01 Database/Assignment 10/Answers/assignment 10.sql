@@ -175,7 +175,9 @@ as
 (
 	select p.Id as PostId,
 			p.Title as PostTitle,
+			p.Score as PostScore,
 			u.DisplayName as AuthorName,
+			u.reputation as AuthorReputation,
 			COUNT(c.Id) as CommentCount
 	from Users u
 	join Posts p on p.OwnerUserId = u.Id
@@ -201,10 +203,16 @@ as
 	select u.Id as UserId,
 			u.DisplayName,
 			u.Reputation,
-			COUNT(b.Id) | ' ' | b.Name as BadgesCount
+			 COUNT(b.Id) AS TotalBadgeCount,
+			 --STRING_AGG( CAST(b.Name AS NVARCHAR(MAX)), ', ') AS BadgeNames -- ununique names
+			(
+			SELECT STRING_AGG(CAST(x.Name AS NVARCHAR(MAX)), ', ')
+			FROM (SELECT DISTINCT bb.Name FROM Badges bb WHERE bb.UserId = u.Id) x
+			) AS BadgeNames	
+
 	from Users u
 	join Badges b on b.UserId = u.Id
-	group by u.Id, u.DisplayName, u.Reputation, b.Name
+	group by u.Id, u.DisplayName, u.Reputation
 )
 go
 select * from vw_UserBadgeStats;
@@ -215,14 +223,69 @@ select * from vw_UserBadgeStats;
 -- Include: UserId, DisplayName, Reputation, LastActivityDate 
 -- Name the view: vw_ActiveUsers. 
 
+go
+create or alter view vw_ActiveUsers
+as
+	with UserPosts as(
+		select p.OwnerUserId ,p.CreationDate, ROW_NUMBER() over (partition by p.OwnerUserId order by p.CreationDate desc) as RN
+		from Posts p
+	)
+	select u.Id as UserId ,
+			u.DisplayName, 
+			u.Reputation,
+			up.CreationDate as LastActivityDate
+	from Users u
+	left join UserPosts up on up.OwnerUserId = u.Id and up.RN = 1 
+	where  (DATEDIFF(day,up.CreationDate, GETDATE()) <= 365 or u.Reputation > 1000)
+
+go
+select * from vw_ActiveUsers order by UserId;
+
+
 --Question 12 : 
 --Create an indexed view that calculates total views and average 
 -- score per user from their posts.
 -- Include: UserId, TotalPosts, TotalViews, AvgScore
 -- Name the view: vw_UserPostMetrics 
 -- Create a unique clustered index on UserId. 
+
+go
+create or alter view vw_UserPostMetrics
+with schemabinding
+as
+	select p.OwnerUserId as UserId,
+			COUNT_BIG(*) as TotalPosts,
+			SUM(ISNULL( p.ViewCount,0)) as TotalViews,
+			SUM(ISNULL(p.Score,0))  as SumScore
+	from dbo.Posts p
+	group by p.OwnerUserId
+
+go
+
+create unique clustered index IX_UserPostMetrics on vw_UserPostMetrics(UserId)
+
+select *, (SumScore / TotalPosts) from vw_UserPostMetrics
+
 --Question 13 : 
 --Create a view that categorizes posts based on their score ranges. 
 -- Categories: 'Excellent' (>= 100), 'Good' (50-99), 'Average' (10-49), 
 --'Low' (< 10) - Include: PostId, Title, Score, Category 
 -- Name the view: vw_PostsByCategory
+
+go
+create or alter view vw_PostsByCategory
+as
+	
+	select p.Id as PostId,
+			p.Title,
+			p.Score,
+			case	
+				when Score >= 100 then 'Excellent'
+				when Score <= 99 and Score >= 50 then 'Good'
+				when Score <= 49 and Score >=10 then  'Average'
+				when Score < 10 then 'Low'
+			end as Category
+	from Posts p
+go
+
+select * from  vw_PostsByCategory;
