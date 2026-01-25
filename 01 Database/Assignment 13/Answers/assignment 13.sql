@@ -4,14 +4,14 @@
 -- b) Enable the trigger trg_Posts_LogInsert 
 -- c) Check if the trigger is disabled or enabled 
  
-DISABLE TRIGGER trg_Posts_LogInsert ON Posts;
+disable trigger trg_Posts_LogInsert ON Posts;
 
-Enable TRIGGER trg_Posts_LogInsert ON Posts;
+enable trigger trg_Posts_LogInsert ON Posts;
 
 
-SELECT name, is_disabled
-FROM sys.triggers
-WHERE object_id = OBJECT_ID('trg_Posts_LogInsert');
+select name, is_disabled
+from sys.triggers
+where object_id = OBJECT_ID('trg_Posts_LogInsert');
  
 
 --Question 06 : 
@@ -31,49 +31,28 @@ create table changelog (
 go
 create or alter trigger trg_AuditComments
 on Comments
-for insert, update, delete
+after insert, update, delete
 as
 begin
     set nocount on;
-    
-    declare @operationtype varchar(10);
-    declare @recordid int;
-    declare @oldvalue varchar(max);
-    declare @newvalue varchar(max);
-    declare @changetimestamp datetime = getdate();
-
-	-- insert
-    if exists (select 1 from inserted)
-    begin
-        set @operationtype = 'insert';
-        select @recordid = id, @newvalue = Text from inserted;
-
-        insert into changelog (tablename, operationtype, recordid, oldvalue, newvalue, changetimestamp)
-        values ('Comments', @operationtype, @recordid, null, @newvalue, @changetimestamp);
-    end
 
     -- update
-    if exists (select 1 from inserted) and exists (select 1 from deleted)
-    begin
-        set @operationtype = 'update';
-        select @recordid = i.id, @oldvalue = d.Text, @newvalue = i.Text
-        from inserted i
-        join deleted d on i.id = d.id;
+    insert into changelog (tablename, operationtype, recordid, oldvalue, newvalue, changetimestamp)
+    select 'Comments', 'update', i.Id, d.Text, i.Text, getdate()
+    from inserted i
+    join deleted d on i.Id = d.Id;
 
-        insert into changelog (tablename, operationtype, recordid, oldvalue, newvalue, changetimestamp)
-        values ('Comments', @operationtype, @recordid, @oldvalue, @newvalue, @changetimestamp);
-    end
+    -- insert
+    insert into changelog (tablename, operationtype, recordid, oldvalue, newvalue, changetimestamp)
+    select 'Comments', 'insert', i.Id, null, i.Text, getdate()
+    from inserted i
+    where not exists (select 1 from deleted d where d.Id = i.Id);
 
-	-- delete
-    if exists (select 1 from deleted)
-    begin
-        set @operationtype = 'delete';
-
-        select @recordid = id, @oldvalue = text from deleted;
-
-        insert into changelog (tablename, operationtype, recordid, oldvalue, newvalue, changetimestamp)
-        values ('Comments', @operationtype, @recordid, @oldvalue, null, @changetimestamp);
-    end
+    -- delete
+    insert into changelog (tablename, operationtype, recordid, oldvalue, newvalue, changetimestamp)
+    select 'Comments', 'delete', d.Id, d.Text, null, getdate()
+    from deleted d
+    where not exists (select 1 from inserted i where i.Id = d.Id);
 end
 go
 

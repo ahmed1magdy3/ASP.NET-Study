@@ -59,6 +59,7 @@ begin
 		'Reputation is updated from ' + CAST(d.Reputation as varchar(20)) + ' to ' + cast(i.Reputation as varchar(20))
 		from inserted i
 		join deleted d on d.Id = i.Id
+		where i.Reputation <> d.Reputation
 	end
 end
 go
@@ -136,7 +137,7 @@ on vw_NewUsers
 instead of insert
 as
 begin
-	if exists (select 1 from inserted where DisplayName is null or DisplayName like '')
+	if exists (select 1 from inserted where DisplayName is null or DisplayName = '')
 	begin
 		raiserror('cann''t insert a nullable name',16,1);
 		return
@@ -303,7 +304,7 @@ begin
     declare @SQLCommand varchar(max) = @EventData.value('(/EVENT_INSTANCE/TSQLCommand/CommandText)[1]', 'varchar(max)');
     declare @TableName varchar(100) = @EventData.value('(/EVENT_INSTANCE/ObjectName)[1]', 'varchar(100)');
 
-    if @SQLCommand like '%DROP COLUMN%'
+    if upper(@SQLCommand) like '%DROP%COLUMN%'
     begin
         insert into ChangeLog (TableName, ActionType, newData)
         values (@TableName, 'Alter Table - Drop Column', @SQLCommand);
@@ -348,7 +349,7 @@ begin
     end
 
 
-    if exists (select 1 from inserted) and exists (select 1 from deleted) or UPDATE(Name)
+    if exists (select 1 from inserted) and exists (select 1 from deleted)
     begin
         insert into ChangeLog (TableName, ActionType, newData)
         select 'Badges', 'Update', 
@@ -381,7 +382,7 @@ select * from ChangeLog;
 --● Total number of posts 
 --● Total score 
 --● Average score 
---for the affected users. 
+--for the affected users.
 
 create table PostStatistics (
     UserId int primary key,
@@ -484,6 +485,7 @@ begin
 
 		delete from Posts 
 		where Id =@id;
+
 	end
 end
 go
@@ -495,11 +497,11 @@ go
 --2. Enable the same trigger again 
 --3. Check whether the trigger is currently enabled or disabled
 
-DISABLE TRIGGER trg_PreventDeleteHighScore ON Posts;
+disable trigger trg_PreventDeleteHighScore on Posts;
 
-Enable TRIGGER trg_PreventDeleteHighScore ON Posts;
+enable trigger trg_PreventDeleteHighScore on Posts;
 
 
-SELECT name, is_disabled
-FROM sys.triggers
-WHERE object_id = OBJECT_ID('trg_PreventDeleteHighScore');
+select name, is_disabled
+from sys.triggers
+where object_id = OBJECT_ID('trg_PreventDeleteHighScore');
