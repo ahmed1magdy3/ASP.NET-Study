@@ -14,9 +14,49 @@ from sys.triggers
 where object_id = OBJECT_ID('trg_Posts_LogInsert');
  
 
+
+-- Question 02 : 
+--Create a SQL login, database user, and grant them SELECT 
+--permission on the Users table only. 
+ 
+ Create Login TestUser With Password = 'test123';
+ Create User TestUser For Login TestUser;
+ grant select on Users to TestUser;
+
+--Question 03 : 
+--Create a database role called "DataAnalysts" and grant it: 
+-- - SELECT permission on all tables 
+-- - EXECUTE permission on all stored procedures 
+-- - Then add a user to this role. 
+ 
+ create role DataAnalysts;
+
+ grant select on schema::dbo to DataAnalysts;
+ grant execute on schema::dbo to DataAnalysts;
+ alter role DataAnalysts add member TestUser;
+ 
+--Question 04 : 
+--Write SQL to REVOKE INSERT and UPDATE permissions from a role 
+-- called "DataEntry" on the Posts table. 
+
+revoke insert, update on Posts from DataEntry;
+
+--Question 05 : 
+--Write SQL to DENY DELETE permission on the Users table to a 
+--specific user, even if they have it through a role. 
+--Explain why DENY is used instead of REVOKE 
+
+deny delete on Users to TestUser;
+-- if the user is a member of role that grant delete, 
+-- so with revoke he can delete, but with delete he can't.
+-- because deny is always win over grant.
+
 --Question 06 : 
 --Create a comprehensive audit trigger that tracks all changes 
---to the Comments table, storing: - Operation type (INSERT/UPDATE/DELETE) - Before and after values for UPDATE - Timestamp and user who made the change 
+--to the Comments table, storing: 
+-- Operation type (INSERT/UPDATE/DELETE) 
+-- Before and after values for UPDATE 
+-- Timestamp and user who made the change 
 
 create table changelog (
     changeid int identity primary key,
@@ -25,7 +65,8 @@ create table changelog (
     recordid int,
     oldvalue varchar(max),
     newvalue varchar(max),
-    changetimestamp datetime,
+    changetimestamp datetime default getdate(),
+    UserName varchar(100) default SYSTEM_USER, 
 );
 
 go
@@ -75,3 +116,25 @@ case
     object_name(t.parent_id) as table_name
 from sys.triggers t
 order by table_name, trigger_name;
+
+
+--Question 08 : 
+--Write a query to view all permissions granted to a specific role 
+--or user, including the object name, permission type, and state.
+
+SELECT
+    dp.name AS PrincipalName,                 
+    dp.type_desc AS PrincipalType,
+    perm.permission_name AS Permission,
+    perm.state_desc AS PermissionState,
+    s.name AS SchemaName,
+    o.name AS ObjectName,
+    o.type_desc AS ObjectType
+FROM sys.database_permissions AS perm
+JOIN sys.database_principals AS dp
+    ON perm.grantee_principal_id = dp.principal_id
+LEFT JOIN sys.objects AS o
+    ON perm.major_id = o.object_id
+LEFT JOIN sys.schemas AS s
+    ON o.schema_id = s.schema_id
+WHERE dp.name in ('TestUser', 'DataAnalysts') -- ( user, role )
